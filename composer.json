@@ -1,0 +1,45 @@
+{
+    "name": "kalprajsolutions/laravel-wordpress-cda",
+    "description": "WordPress blog caching functionality for Laravel applications",
+    "type": "library",
+    "keywords": ["laravel", "wordpress", "blog", "caching", "api"],
+    "homepage": "https://github.com/kalprajsolutions/wordpress-blog-system",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Kalpraj Solutions",
+            "email": "info@kalprajsolutions.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "laravel/framework": "^10.0|^11.0",
+        "intervention/image": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0|^11.0",
+        "orchestra/testbench": "^8.0|^9.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "KalprajSolutions\\LaravelWordpressCda\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "KalprajSolutions\\LaravelWordpressCda\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "KalprajSolutions\\LaravelWordpressCda\\WordPressCdaServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
