@@ -368,7 +368,7 @@ class WordPressPost implements ArrayAccess, Arrayable, Jsonable, JsonSerializabl
     public function getFormattedImage(string $size = 'original'): ?string
     {
         if (empty($this->featured_image)) {
-            return asset('images/website-default.png'); // Fallback image
+            return asset('images/blog-default.jpg'); // Fallback image
         }
 
         // If already cached locally, return as-is
