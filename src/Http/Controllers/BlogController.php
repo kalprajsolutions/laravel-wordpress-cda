@@ -7,6 +7,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Blog Controller
@@ -31,10 +32,29 @@ class BlogController extends Controller
         $page = $request->get('page', 1);
         $perPage = 10; // 10 posts per page
 
+        // Timing for getAllPosts()
+        $startTime = microtime(true);
         $posts = $this->repository->getAllPosts($perPage, $page);
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
+        Log::info("getAllPosts took: {$duration}ms");
+
+        // Timing for getAuthorCategories()
+        $startTime = microtime(true);
         $categories = $this->repository->getAuthorCategories();
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
+        Log::info("getAuthorCategories took: {$duration}ms");
+
+        // Timing for getAuthorTags()
+        $startTime = microtime(true);
         $tags = $this->repository->getAuthorTags();
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
+        Log::info("getAuthorTags took: {$duration}ms");
+
+        // Timing for getRecentPosts()
+        $startTime = microtime(true);
         $recent_posts = $this->repository->getRecentPosts(5);
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
+        Log::info("getRecentPosts took: {$duration}ms");
 
         return view('blog.index', compact('posts', 'categories', 'tags', 'recent_posts'));
     }

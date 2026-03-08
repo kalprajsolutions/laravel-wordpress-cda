@@ -86,9 +86,19 @@ class WordPressApiService
             'per_page' => $this->perPage,
             'orderby' => 'date',
             'order' => 'desc',
-            '_embed' => 'wp:term,wp:featuredmedia,author', // Include embedded data like featured media and author
-            '_fields' => 'id,date,date_gmt,guid,modified,modified_gmt,slug,status,type,link,title,excerpt,author,featured_media,comment_status,ping_status,sticky,template,format,meta,categories,tags,class_list,yoast_head,yoast_head_json,uagb_featured_image_src,uagb_author_info,uagb_comment_info,uagb_excerpt,_links',
         ];
+
+        // If _fields is provided, use minimal fields and don't include _embed
+        // This significantly improves API performance
+        if (isset($filters['_fields'])) {
+            $defaultFilters['_fields'] = $filters['_fields'];
+            // Remove _embed from filters if present, since we're using minimal fields
+            unset($filters['_fields']);
+        } else {
+            // Default _embed only when not using minimal fields
+            $defaultFilters['_embed'] = 'wp:term,wp:featuredmedia,author';
+            $defaultFilters['_fields'] = 'id,date,date_gmt,guid,modified,modified_gmt,slug,status,type,link,title,excerpt,author,featured_media,comment_status,ping_status,sticky,template,format,meta,categories,tags,class_list,yoast_head,yoast_head_json,uagb_featured_image_src,uagb_author_info,uagb_comment_info,uagb_excerpt,_links';
+        }
 
         $queryParams = array_merge($defaultFilters, $filters);
         $cacheKey = 'wp_posts_' . md5(serialize($queryParams));
@@ -375,5 +385,91 @@ class WordPressApiService
     public function getTags(array $post): array
     {
         return $post['_embedded']['wp:term'][1] ?? [];
+    }
+
+    /**
+     * Fetch all categories directly from the categories endpoint.
+     * This is much more efficient than extracting from posts.
+     *
+     * @param int $perPage Number of categories per page
+     * @return array
+     */
+    public function fetchCategories(int $perPage = 100): array
+    {
+        $cacheKey = 'wp_all_categories_' . $perPage;
+
+        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($perPage) {
+            try {
+                $categories = [];
+                $page = 1;
+
+                do {
+                    $response = $this->makeRequest('GET', '/categories', [
+                        'per_page' => $perPage,
+                        'page' => $page,
+                        'hide_empty' => false,
+                    ]);
+
+                    if ($response->successful()) {
+                        $pageCategories = $response->json() ?? [];
+                        $categories = array_merge($categories, $pageCategories);
+                        $page++;
+                    } else {
+                        break;
+                    }
+                } while (count($pageCategories) === $perPage);
+
+                return $categories;
+            } catch (\Exception $e) {
+                Log::error('WordPress API categories fetch exception', [
+                    'message' => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+        });
+    }
+
+    /**
+     * Fetch all tags directly from the tags endpoint.
+     * This is much more efficient than extracting from posts.
+     *
+     * @param int $perPage Number of tags per page
+     * @return array
+     */
+    public function fetchTags(int $perPage = 100): array
+    {
+        $cacheKey = 'wp_all_tags_' . $perPage;
+
+        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($perPage) {
+            try {
+                $tags = [];
+                $page = 1;
+
+                do {
+                    $response = $this->makeRequest('GET', '/tags', [
+                        'per_page' => $perPage,
+                        'page' => $page,
+                        'hide_empty' => false,
+                    ]);
+
+                    if ($response->successful()) {
+                        $pageTags = $response->json() ?? [];
+                        $tags = array_merge($tags, $pageTags);
+                        $page++;
+                    } else {
+                        break;
+                    }
+                } while (count($pageTags) === $perPage);
+
+                return $tags;
+            } catch (\Exception $e) {
+                Log::error('WordPress API tags fetch exception', [
+                    'message' => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+        });
     }
 }

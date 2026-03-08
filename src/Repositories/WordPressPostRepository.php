@@ -221,50 +221,32 @@ class WordPressPostRepository
         $cacheKey = 'wp_author_' . config('wordpress.author_id') . '_categories_with_counts';
 
         return Cache::remember($cacheKey, config('wordpress.cache_duration'), function () {
-            $categories = collect();
-            $page = 1;
-            $perPage = 10; // Smaller pagination to avoid API failures
+            $startTime = microtime(true);
+            
+            // Use the direct categories endpoint - much more efficient!
+            // This is just 1-2 API calls instead of iterating through all posts
+            $categoriesData = $this->apiService->fetchCategories(100);
+            
+            if (empty($categoriesData)) {
+                return collect();
+            }
 
-            // Fetch all posts by author with pagination
-            do {
-                $posts = $this->apiService->fetchPosts([
-                    'author' => config('wordpress.author_id'),
-                    'per_page' => $perPage,
-                    'page' => $page,
-                    '_embed' => 'wp:term',
-                ]);
+            // Transform to WordPressCategory models
+            $categories = collect($categoriesData)->map(function ($cat) {
+                $category = new WordPressCategory();
+                $category->id = $cat['id'];
+                $category->name = $cat['name'] ?? 'Category ' . $cat['id'];
+                $category->slug = $cat['slug'] ?? 'category-' . $cat['id'];
+                $category->count = $cat['count'] ?? 0;
+                $category->description = $cat['description'] ?? '';
+                return $category;
+            });
+            
+            $endTime = microtime(true);
+            $duration = round(($endTime - $startTime) * 1000, 2);
+            Log::info("getAuthorCategories: Fetched " . count($categories) . " categories in {$duration}ms");
 
-                if (empty($posts)) {
-                    break;
-                }
-
-                // Extract categories from each post and count them
-                foreach ($posts as $post) {
-                    if (isset($post['_embedded']['wp:term'])) {
-                        foreach ($post['_embedded']['wp:term'] as $terms) {
-                            foreach ($terms as $term) {
-                                if ($term['taxonomy'] === 'category') {
-                                    $categoryId = $term['id'];
-
-                                    // Initialize category if not exists
-                                    if (!isset($categories[$categoryId])) {
-                                        $category = WordPressCategory::fromApiResponse($term);
-                                        $category->count = 0; // Start count at 0
-                                        $categories->put($categoryId, $category);
-                                    }
-
-                                    // Increment count for this category
-                                    $categories[$categoryId]->count++;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                $page++;
-            } while (count($posts) === $perPage);
-
-            return $categories->values();
+            return $categories;
         });
     }
 
@@ -278,40 +260,31 @@ class WordPressPostRepository
         $cacheKey = 'wp_author_' . config('wordpress.author_id') . '_tags';
 
         return Cache::remember($cacheKey, config('wordpress.cache_duration'), function () {
-            $tags = collect();
-            $page = 1;
-            $perPage = 10; // Changed from 100
+            $startTime = microtime(true);
+            
+            // Use the direct tags endpoint - much more efficient!
+            // This is just 1-2 API calls instead of iterating through all posts
+            $tagsData = $this->apiService->fetchTags(100);
+            
+            if (empty($tagsData)) {
+                return collect();
+            }
 
-            // Fetch all posts by author with pagination
-            do {
-                $posts = $this->apiService->fetchPosts([
-                    'author' => config('wordpress.author_id'),
-                    'per_page' => $perPage,
-                    'page' => $page,
-                    '_embed' => 'wp:term',
-                ]);
+            // Transform to WordPressTag models
+            $tags = collect($tagsData)->map(function ($tag) {
+                $wpTag = new WordPressTag();
+                $wpTag->id = $tag['id'];
+                $wpTag->name = $tag['name'] ?? 'Tag ' . $tag['id'];
+                $wpTag->slug = $tag['slug'] ?? 'tag-' . $tag['id'];
+                $wpTag->count = $tag['count'] ?? 0;
+                return $wpTag;
+            });
+            
+            $endTime = microtime(true);
+            $duration = round(($endTime - $startTime) * 1000, 2);
+            Log::info("getAuthorTags: Fetched " . count($tags) . " tags in {$duration}ms");
 
-                if (empty($posts)) {
-                    break;
-                }
-
-                // Extract tags from each post
-                foreach ($posts as $post) {
-                    if (isset($post['_embedded']['wp:term'])) {
-                        foreach ($post['_embedded']['wp:term'] as $terms) {
-                            foreach ($terms as $term) {
-                                if ($term['taxonomy'] === 'post_tag') {
-                                    $tags->put($term['id'], WordPressTag::fromApiResponse($term));
-                                }
-                            }
-                        }
-                    }
-                }
-
-                $page++;
-            } while (count($posts) === $perPage);
-
-            return $tags->values();
+            return $tags;
         });
     }
 

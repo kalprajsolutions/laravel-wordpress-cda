@@ -164,7 +164,7 @@ class WordPressImageService
             // Store the mapping
             $this->storeMapping($imageUrl, $path);
 
-            Log::info('WordPress image cached successfully', [
+            Log::info(__METHOD__ .'WordPress image cached successfully', [
                 'original_url' => $imageUrl,
                 'local_path' => $path,
             ]);
@@ -590,108 +590,122 @@ class WordPressImageService
         }
     }
 
-    /**
-     * Download and cache multiple images in parallel using Laravel's HTTP pool.
-     *
-     * @param array $urls Array of image URLs to download
-     * @return array Array of URL to local path mappings for all URLs (both cached and newly downloaded)
-     */
-    public function downloadAndCacheMultiple(array $urls): array
-    {
-        $results = [];
-        $uncachedUrls = [];
+/**
+ * Download and cache multiple images in parallel using Laravel's HTTP pool.
+ *
+ * @param array $urls Array of image URLs to download
+ * @return array Array of URL to local path mappings for all URLs (both cached and newly downloaded)
+ */
+public function downloadAndCacheMultiple(array $urls): array
+{
+    $results = [];
+    $uncachedUrls = [];
 
-        // First pass: check which URLs are already cached
-        foreach ($urls as $url) {
-            $cachedPath = $this->getCachedImage($url);
-            if ($cachedPath !== null) {
-                $results[$url] = $cachedPath;
-            } else {
-                $uncachedUrls[] = $url;
-            }
+    // First pass: check which URLs are already cached
+    foreach ($urls as $url) {
+        $cachedPath = $this->getCachedImage($url);
+        if ($cachedPath !== null) {
+            $results[$url] = $cachedPath;
+        } else {
+            $uncachedUrls[] = $url;
         }
+    }
 
-        // If all URLs are cached, return early
-        if (empty($uncachedUrls)) {
-            return $results;
-        }
-
-        // Use Http::pool to execute requests in parallel
-        $responses = Http::pool(function ($pool) use ($uncachedUrls) {
-            $index = 0;
-            foreach ($uncachedUrls as $url) {
-                $pool->as($index++);
-                $pool->withOptions([
-                    'timeout' => 60,
-                    'connect_timeout' => 10,
-                ])->get($url);
-            }
-        });
-
-        // Process each response
-        $newMappings = [];
-
-        foreach ($responses as $index => $response) {
-            $url = $uncachedUrls[$index];
-
-            // Check if the request was successful
-            if (!$response->successful()) {
-                Log::warning('Failed to download WordPress image in batch', [
-                    'url' => $url,
-                    'status' => $response->status(),
-                ]);
-                continue;
-            }
-
-            try {
-                $imageData = $response->body();
-                $contentType = $response->header('Content-Type');
-
-                // Determine file extension using existing methods
-                $extension = $this->getExtensionFromContentType($contentType) ?? $this->getExtensionFromUrl($url) ?? 'jpg';
-
-                // Generate path based on configuration
-                if ($this->preserveStructure) {
-                    $path = $this->generateSeoFriendlyPath($url, $extension);
-                } else {
-                    // Fallback to hashed filename
-                    $filename = $this->generateFilename($url, $extension);
-                    $path = 'images/' . $filename;
-                }
-
-                // Store the file using the configured disk
-                $disk = Storage::disk($this->disk);
-
-                if (!$disk->put($path, $imageData)) {
-                    Log::error('Failed to store WordPress image in batch', [
-                        'url' => $url,
-                        'path' => $path,
-                    ]);
-                    continue;
-                }
-
-                // Add to results and new mappings
-                $results[$url] = $path;
-                $newMappings[$url] = $path;
-
-                Log::info('WordPress image cached successfully via batch', [
-                    'original_url' => $url,
-                    'local_path' => $path,
-                ]);
-            } catch (\Exception $e) {
-                Log::error('Exception while processing WordPress image in batch', [
-                    'url' => $url,
-                    'message' => $e->getMessage(),
-                ]);
-                continue;
-            }
-        }
-
-        // Update all mappings (both cache and JSON file) after all downloads complete
-        foreach ($newMappings as $url => $path) {
-            $this->storeMapping($url, $path);
-        }
-
+    // If all URLs are cached, return early
+    if (empty($uncachedUrls)) {
         return $results;
     }
+
+    // Use Http::pool to execute requests in parallel
+    $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($uncachedUrls) {
+        foreach ($uncachedUrls as $url) {
+            $pool->withOptions([
+                'timeout' => 60,
+                'connect_timeout' => 10,
+            ])->get($url);
+        }
+    });
+
+    // Process each response (responses are returned in the same order as requests)
+    $newMappings = [];
+
+    foreach ($responses as $index => $response) {
+        $url = $uncachedUrls[$index] ?? null;
+
+        // Skip if URL not found (shouldn't happen, but safety check)
+        if (!$url) {
+            continue;
+        }
+
+        // Skip null responses (failed requests)
+        if ($response === null) {
+            Log::warning('Failed to download WordPress image in batch - null response', [
+                'url' => $url,
+            ]);
+            continue;
+        }
+
+        // Check if the request was successful
+        if (!$response->successful()) {
+            Log::warning('Failed to download WordPress image in batch', [
+                'url' => $url,
+                'status' => $response->status(),
+            ]);
+            continue;
+        }
+
+        try {
+            $imageData = $response->body();
+            $contentType = $response->header('Content-Type');
+
+            // Determine file extension using existing methods
+            $extension = $this->getExtensionFromContentType($contentType) 
+                ?? $this->getExtensionFromUrl($url) 
+                ?? 'jpg';
+
+            // Generate path based on configuration
+            if ($this->preserveStructure) {
+                $path = $this->generateSeoFriendlyPath($url, $extension);
+            } else {
+                // Fallback to hashed filename
+                $filename = $this->generateFilename($url, $extension);
+                $path = 'images/' . $filename;
+            }
+
+            // Store the file using the configured disk
+            $disk = Storage::disk($this->disk);
+
+            if (!$disk->put($path, $imageData)) {
+                Log::error('Failed to store WordPress image in batch', [
+                    'url' => $url,
+                    'path' => $path,
+                ]);
+                continue;
+            }
+
+            // Add to results and new mappings
+            $results[$url] = $path;
+            $newMappings[$url] = $path;
+
+            Log::info(__METHOD__ . ' - WordPress image cached successfully via batch', [
+                'original_url' => $url,
+                'local_path' => $path,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Exception while processing WordPress image in batch', [
+                'url' => $url,
+                'message' => $e->getMessage(),
+            ]);
+            continue;
+        }
+    }
+
+    // Update all mappings (both cache and JSON file) after all downloads complete
+    foreach ($newMappings as $url => $path) {
+        $this->storeMapping($url, $path);
+    }
+
+    return $results;
+}
+
 }
