@@ -71,7 +71,7 @@ $post = $repository->getPostBySlug('my-blog-post');
 // Get posts by category
 $posts = $repository->getPostsByCategory('technology');
 
-// Get posts by tag  
+// Get posts by tag
 $posts = $repository->getPostsByTag('laravel');
 
 // Get recent posts
@@ -128,20 +128,6 @@ $post->commentCount();
 $post->getFormattedImage('full'); // Resize and cache featured image
 ```
 
-### Available Routes
-
-The package provides a `BlogController` that you can use in your routes:
-
-```php
-use KalprajSolutions\LaravelWordpressCda\Http\Controllers\BlogController;
-
-// In your routes/web.php
-Route::get('/blog', [BlogController::class, 'index']);
-Route::get('/blog/{slug}', [BlogController::class, 'show'])->name('blog.post');
-Route::get('/blog/category/{slug}', [BlogController::class, 'byCategory'])->name('blog.category');
-Route::get('/blog/tag/{slug}', [BlogController::class, 'byTag'])->name('blog.tag');
-```
-
 ### Using the Console Command
 
 Cache all blog content:
@@ -169,6 +155,7 @@ $repository->getPostsByAuthor($authorId, $perPage);
 ## View Compatibility
 
 The `WordPressPost` model is designed to be compatible with views expecting Canvas (or similar) blog models. It implements:
+
 - `ArrayAccess` for meta data access
 - `Arrayable`, `Jsonable`, `JsonSerializable` for serialization
 
@@ -196,24 +183,19 @@ Add a new disk in `config/filesystems.php`:
     // ...
     'wordpress' => [
         'driver' => 'local',
-        'root' => storage_path('app/public/blog-media'),
-        'url' => env('APP_URL').'/storage/blog-media',
+        'root' => public_path('content'),
+        'url' => env('APP_URL') . '/content',
         'visibility' => 'public',
+        'throw' => false,
     ],
 ],
-```
-
-Make sure the storage link is created:
-
-```bash
-php artisan storage:link
 ```
 
 ## Architecture
 
 ```mermaid
 graph TB
-    A[Laravel Application] --> B[BlogController]
+    A[Laravel Application] --> B[WordPressPostRepository]
     B --> C[WordPressPostRepository]
     C --> D[WordPressApiService]
     C --> E[WordPressImageService]
@@ -222,11 +204,14 @@ graph TB
     E --> F
     C --> H[ContentImageProcessor]
     H --> E
-    
+
     I[Console Command] --> C
     I --> E
     I --> H
-    
+```
+
+```mermaid
+graph TB
     J[Models] --> K[WordPressPost]
     J --> L[WordPressCategory]
     J --> M[WordPressTag]
@@ -245,4 +230,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Author
 
-Kalpraj Solutions - info@kalprajsolutions.com
+Kalpraj Solutions - kalprajsolutions.com
