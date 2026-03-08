@@ -144,9 +144,11 @@ class CacheWordPressContent extends Command
     {
         $this->info('Caching all images...');
         
+        $allUrls = [];
+        
+        // First pass: collect all image URLs from all posts
         $page = 1;
         $perPage = 10;
-        $totalImages = 0;
         
         do {
             $posts = $this->apiService->fetchPosts([
@@ -162,26 +164,30 @@ class CacheWordPressContent extends Command
             }
             
             foreach ($posts as $postData) {
-                // Cache featured image
+                // Collect featured image URL
                 if (isset($postData['_embedded']['wp:featuredmedia'][0]['source_url'])) {
-                    $this->imageService->getOrDownload(
-                        $postData['_embedded']['wp:featuredmedia'][0]['source_url']
-                    );
-                    $totalImages++;
+                    $allUrls[] = $postData['_embedded']['wp:featuredmedia'][0]['source_url'];
                 }
                 
-                // Cache content images
+                // Collect content image URLs
                 if (isset($postData['content']['rendered'])) {
-                    $urls = $this->contentProcessor->extractImageUrls($postData['content']['rendered']);
-                    foreach ($urls as $url) {
-                        $this->imageService->getOrDownload($url);
-                        $totalImages++;
-                    }
+                    $contentUrls = $this->contentProcessor->extractImageUrls($postData['content']['rendered']);
+                    $allUrls = array_merge($allUrls, $contentUrls);
                 }
             }
             
             $page++;
         } while (count($posts) === $perPage);
+        
+        // Remove duplicates
+        $allUrls = array_unique($allUrls);
+        
+        $this->info('Found ' . count($allUrls) . ' unique images to cache');
+        
+        // Download all images in parallel using bulk download
+        $results = $this->imageService->downloadAndCacheMultiple($allUrls);
+        
+        $totalImages = count($results);
         
         $this->info("Total images cached: {$totalImages}");
     }

@@ -4,6 +4,7 @@ namespace KalprajSolutions\LaravelWordpressCda\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class ContentImageProcessor
 {
@@ -53,19 +54,52 @@ class ContentImageProcessor
             return $html;
         }
 
-        // Download and cache each unique image
-        $urlMappings = [];
-        foreach ($imageUrls as $url) {
-            if ($this->imageService->isWordPressMediaUrl($url)) {
-                $localUrl = $this->imageService->getOrDownload($url);
-                if ($localUrl !== null && $localUrl !== $url) {
-                    $urlMappings[$url] = $localUrl;
-                }
+        // Step 1: Filter to get unique WordPress media URLs
+        $wpMediaUrls = array_filter($imageUrls, function ($url) {
+            return $this->imageService->isWordPressMediaUrl($url);
+        });
+
+        $wpMediaUrls = array_unique($wpMediaUrls);
+
+        if (empty($wpMediaUrls)) {
+            return $html;
+        }
+
+        // Step 2: Separate cached URLs from URLs that need downloading
+        $cachedMappings = [];
+        $urlsToDownload = [];
+
+        foreach ($wpMediaUrls as $url) {
+            $cachedPath = $this->imageService->getCachedImage($url);
+            if ($cachedPath !== null) {
+                $cachedMappings[$url] = $cachedPath;
+            } else {
+                $urlsToDownload[] = $url;
             }
         }
 
+        // Step 3: If there are URLs that need downloading, use parallel bulk download
+        $urlMappings = $cachedMappings;
+
+        if (!empty($urlsToDownload)) {
+            $downloadedMappings = $this->imageService->downloadAndCacheMultiple($urlsToDownload);
+
+            // Step 4: Combine the results from cached URLs and newly downloaded URLs
+            $urlMappings = array_merge($cachedMappings, $downloadedMappings);
+        } else {
+            // All URLs were already cached
+            $urlMappings = $cachedMappings;
+        }
+
+        // Convert local paths to URLs for replacement
+        $urlMappingsWithUrls = [];
+        $diskName = config('wordpress.image_disk', 'blog-media');
+        foreach ($urlMappings as $originalUrl => $localPath) {
+            $urlMappingsWithUrls[$originalUrl] = Storage::disk($diskName)->url($localPath);
+        }
+
         // Replace URLs in HTML
-        $processedHtml = $this->replaceUrlsInHtml($html, $urlMappings);
+        $processedHtml = $this->replaceUrlsInHtml($html, $urlMappingsWithUrls);
 
         // Cache the processed content if cache key provided
         if ($cacheKey !== null) {

@@ -87,7 +87,7 @@ class WordPressApiService
             'orderby' => 'date',
             'order' => 'desc',
             '_embed' => 'wp:term,wp:featuredmedia,author', // Include embedded data like featured media and author
-            // '_fields' => 'id,title,excerpt,slug,featured_media,author'
+            '_fields' => 'id,date,date_gmt,guid,modified,modified_gmt,slug,status,type,link,title,excerpt,author,featured_media,comment_status,ping_status,sticky,template,format,meta,categories,tags,class_list,yoast_head,yoast_head_json,uagb_featured_image_src,uagb_author_info,uagb_comment_info,uagb_excerpt,_links',
         ];
 
         $queryParams = array_merge($defaultFilters, $filters);
