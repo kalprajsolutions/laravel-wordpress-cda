@@ -222,27 +222,44 @@ class WordPressPostRepository
 
         return Cache::remember($cacheKey, config('wordpress.cache_duration'), function () {
             $startTime = microtime(true);
-            
-            // Use the direct categories endpoint - much more efficient!
-            // This is just 1-2 API calls instead of iterating through all posts
-            $categoriesData = $this->apiService->fetchCategories(100);
-            
+
+            // Fetch all categories from WordPress
+            $categoriesData = $this->apiService->fetchCategories(config('wordpress.per_page'));
+
             if (empty($categoriesData)) {
                 return collect();
             }
 
-            // Transform to WordPressCategory models
-            $categories = collect($categoriesData)->map(function ($cat) {
-                $category = new WordPressCategory();
-                $category->id = $cat['id'];
-                $category->name = $cat['name'] ?? 'Category ' . $cat['id'];
-                $category->slug = $cat['slug'] ?? 'category-' . $cat['id'];
-                $category->count = $cat['count'] ?? 0;
-                $category->description = $cat['description'] ?? '';
-                return $category;
-            });
-            
-            $endTime = microtime(true);
+            // Fetch only the author's posts (lightweight: just id + categories fields)
+            // This gives us accurate per-author counts instead of site-wide counts
+            $authorPosts = $this->apiService->fetchPosts([
+                'per_page' => config('wordpress.per_page'),
+                '_fields'  => 'id,categories',
+            ]);
+
+            // Build a map of category_id => count of author's posts in that category
+            $authorCategoryCounts = [];
+            foreach ($authorPosts as $post) {
+                foreach ($post['categories'] ?? [] as $catId) {
+                    $authorCategoryCounts[$catId] = ($authorCategoryCounts[$catId] ?? 0) + 1;
+                }
+            }
+
+            // Build category models, using author-specific counts and skipping unused ones
+            $categories = collect($categoriesData)
+                ->filter(fn ($cat) => isset($authorCategoryCounts[$cat['id']]))
+                ->map(function ($cat) use ($authorCategoryCounts) {
+                    $category = new WordPressCategory();
+                    $category->id          = $cat['id'];
+                    $category->name        = $cat['name'] ?? 'Category ' . $cat['id'];
+                    $category->slug        = $cat['slug'] ?? 'category-' . $cat['id'];
+                    $category->count       = $authorCategoryCounts[$cat['id']];  // author-scoped count
+                    $category->description = $cat['description'] ?? '';
+                    return $category;
+                })
+                ->values();
+
+            $endTime  = microtime(true);
             $duration = round(($endTime - $startTime) * 1000, 2);
             Log::info("getAuthorCategories: Fetched " . count($categories) . " categories in {$duration}ms");
 
@@ -264,7 +281,7 @@ class WordPressPostRepository
             
             // Use the direct tags endpoint - much more efficient!
             // This is just 1-2 API calls instead of iterating through all posts
-            $tagsData = $this->apiService->fetchTags(100);
+            $tagsData = $this->apiService->fetchTags(config('wordpress.per_page'));
             
             if (empty($tagsData)) {
                 return collect();
@@ -487,7 +504,7 @@ class WordPressPostRepository
 
         return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($baseUrl, $taxonomy, $filters) {
             $defaultFilters = [
-                'per_page' => 100,
+                'per_page' => config('wordpress.per_page'),
                 'hide_empty' => true,
             ];
 

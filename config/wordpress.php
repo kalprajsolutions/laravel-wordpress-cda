@@ -1,14 +1,14 @@
 <?php
 
 return [
-    'base_url' => env('WP_API_BASE_URL', 'http://localhost:8000/wp-json/wp/v2'),
-    'author_id' => env('WP_API_AUTHOR_ID', 3),
-    'per_page' => env('WP_API_PER_PAGE', 100),
-    'cache_duration' => env('WP_API_CACHE_DURATION', 60), // minutes
+    'base_url' => env('WP_API_BASE_URL', 'https://wordpress.org/wp-json/wp/v2'),
+    'author_id' => env('WP_API_AUTHOR_ID', 1),
+    'per_page' => env('WP_API_PER_PAGE', 100), // how many posts to fetch per request (set this based on your wordpress site's performance)
+    'cache_duration' => env('WP_API_CACHE_DURATION', 60), // in minutes
 
 
     'image_disk' => env('WP_API_FILESYSTEM_DISK', 'public'), // filesystem disk for cached images
- 
+
     /*
     |--------------------------------------------------------------------------
     | Preserve Original Structure

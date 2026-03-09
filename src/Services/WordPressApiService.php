@@ -451,6 +451,7 @@ class WordPressApiService
                         'per_page' => $perPage,
                         'page' => $page,
                         'hide_empty' => false,
+                        '_fields' => 'id,name,slug,count'
                     ]);
 
                     if ($response->successful()) {
