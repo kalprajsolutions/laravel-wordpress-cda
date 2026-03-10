@@ -9,9 +9,14 @@ use Illuminate\Support\Facades\Storage;
 class ContentImageProcessor
 {
     /**
-     * Cache prefix for processed content.
+     * Cache key prefix for this package.
      */
-    protected string $contentCachePrefix = 'wp_processed_content_';
+    protected string $cachePrefix;
+
+    /**
+     * Cache tags for this package.
+     */
+    protected array $cacheTags;
 
     /**
      * Cache TTL for processed content (in seconds).
@@ -21,7 +26,10 @@ class ContentImageProcessor
 
     public function __construct(
         private WordPressImageService $imageService
-    ) {}
+    ) {
+        $this->cachePrefix = config('wordpress.cache_prefix', 'wp_cda_');
+        $this->cacheTags = config('wordpress.cache_tags', ['wordpress_cda']);
+    }
 
     /**
      * Process HTML content, find all images, download them, and replace URLs.
@@ -284,7 +292,7 @@ class ContentImageProcessor
      */
     protected function getCachedContent(string $cacheKey): ?string
     {
-        return Cache::get($this->contentCachePrefix . $cacheKey);
+        return Cache::tags($this->cacheTags)->get($this->cachePrefix . 'processed_content_' . $cacheKey);
     }
 
     /**
@@ -296,7 +304,7 @@ class ContentImageProcessor
      */
     protected function cacheContent(string $cacheKey, string $content): void
     {
-        Cache::put($this->contentCachePrefix . $cacheKey, $content, $this->cacheTtl);
+        Cache::tags($this->cacheTags)->put($this->cachePrefix . 'processed_content_' . $cacheKey, $content, $this->cacheTtl);
     }
 
     /**
@@ -307,7 +315,7 @@ class ContentImageProcessor
      */
     public function clearCachedContent(string $cacheKey): void
     {
-        Cache::forget($this->contentCachePrefix . $cacheKey);
+        Cache::tags($this->cacheTags)->forget($this->cachePrefix . 'processed_content_' . $cacheKey);
     }
 
     /**

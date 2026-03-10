@@ -26,11 +26,23 @@ class WordPressPostRepository
      */
     protected int $cacheDuration;
 
+    /**
+     * Cache key prefix for this package.
+     */
+    protected string $cachePrefix;
+
+    /**
+     * Cache tags for this package.
+     */
+    protected array $cacheTags;
+
     public function __construct(
         private WordPressApiService $apiService,
         private WordPressImageService $imageService
     ) {
         $this->cacheDuration = config('wordpress.cache_duration', 60);
+        $this->cachePrefix = config('wordpress.cache_prefix', 'wp_cda_');
+        $this->cacheTags = config('wordpress.cache_tags', ['wordpress_cda']);
     }
 
     /**
@@ -91,9 +103,9 @@ class WordPressPostRepository
      */
     public function getPostBySlug(string $slug, bool $cacheImages = false): ?WordPressPost
     {
-        $cacheKey = 'wp_repo_post_slug_' . md5($slug);
+        $cacheKey = $this->cachePrefix . 'repo_post_slug_' . md5($slug);
 
-        $postData = Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
+        $postData = Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
             return $this->apiService->fetchPostBySlug($slug);
         });
 
@@ -150,9 +162,9 @@ class WordPressPostRepository
      */
     public function getPostsByCategory(string $categorySlug): Collection
     {
-        $cacheKey = 'wp_repo_posts_category_' . md5($categorySlug);
+        $cacheKey = $this->cachePrefix . 'repo_posts_category_' . md5($categorySlug);
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($categorySlug) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($categorySlug) {
             // First, find the category ID by slug
             $category = $this->getCategoryBySlug($categorySlug);
 
@@ -176,9 +188,9 @@ class WordPressPostRepository
      */
     public function getPostsByTag(string $tagSlug): Collection
     {
-        $cacheKey = 'wp_repo_posts_tag_' . md5($tagSlug);
+        $cacheKey = $this->cachePrefix . 'repo_posts_tag_' . md5($tagSlug);
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($tagSlug) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($tagSlug) {
             // First, find the tag ID by slug
             $tag = $this->getTagBySlug($tagSlug);
 
@@ -202,9 +214,9 @@ class WordPressPostRepository
      */
     public function getRecentPosts(int $limit = 5): Collection
     {
-        $cacheKey = 'wp_repo_recent_posts_' . $limit;
+        $cacheKey = $this->cachePrefix . 'repo_recent_posts_' . $limit;
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($limit) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($limit) {
             $postsData = $this->apiService->fetchPosts([
                 'per_page' => $limit,
                 'orderby' => 'date',
@@ -223,9 +235,9 @@ class WordPressPostRepository
      */
     public function getFeaturedPosts(int $limit = 3): Collection
     {
-        $cacheKey = 'wp_repo_featured_posts_' . $limit;
+        $cacheKey = $this->cachePrefix . 'repo_featured_posts_' . $limit;
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($limit) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($limit) {
             // In WordPress, sticky posts can be fetched with the sticky parameter
             $postsData = $this->apiService->fetchPosts([
                 'per_page' => $limit,
@@ -248,9 +260,9 @@ class WordPressPostRepository
      */
     public function getAuthorCategories(): Collection
     {
-        $cacheKey = 'wp_author_' . config('wordpress.author_id') . '_categories_with_counts';
+        $cacheKey = $this->cachePrefix . 'author_' . config('wordpress.author_id') . '_categories_with_counts';
 
-        return Cache::remember($cacheKey, config('wordpress.cache_duration'), function () {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, config('wordpress.cache_duration'), function () {
             $startTime = microtime(true);
 
             // Fetch all categories from WordPress
@@ -304,9 +316,9 @@ class WordPressPostRepository
      */
     public function getAuthorTags(): Collection
     {
-        $cacheKey = 'wp_author_' . config('wordpress.author_id') . '_tags';
+        $cacheKey = $this->cachePrefix . 'author_' . config('wordpress.author_id') . '_tags';
 
-        return Cache::remember($cacheKey, config('wordpress.cache_duration'), function () {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, config('wordpress.cache_duration'), function () {
             $startTime = microtime(true);
 
             // Use the direct tags endpoint - much more efficient!
@@ -342,7 +354,7 @@ class WordPressPostRepository
      */
     public function clearAuthorCategoriesCache(): void
     {
-        Cache::forget('wp_author_' . config('wordpress.author_id') . '_categories_with_counts');
+        Cache::tags($this->cacheTags)->forget($this->cachePrefix . 'author_' . config('wordpress.author_id') . '_categories_with_counts');
     }
 
     /**
@@ -352,7 +364,7 @@ class WordPressPostRepository
      */
     public function clearAuthorTagsCache(): void
     {
-        Cache::forget('wp_author_' . config('wordpress.author_id') . '_tags');
+        Cache::tags($this->cacheTags)->forget($this->cachePrefix . 'author_' . config('wordpress.author_id') . '_tags');
     }
 
     /**
@@ -363,9 +375,9 @@ class WordPressPostRepository
      */
     public function getCategoryBySlug(string $slug): ?WordPressCategory
     {
-        $cacheKey = 'wp_repo_category_slug_' . md5($slug);
+        $cacheKey = $this->cachePrefix . 'repo_category_slug_' . md5($slug);
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
             try {
                 $categories = $this->fetchTerms('categories', ['slug' => $slug]);
 
@@ -390,9 +402,9 @@ class WordPressPostRepository
      */
     public function getTagBySlug(string $slug): ?WordPressTag
     {
-        $cacheKey = 'wp_repo_tag_slug_' . md5($slug);
+        $cacheKey = $this->cachePrefix . 'repo_tag_slug_' . md5($slug);
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
             try {
                 $tags = $this->fetchTerms('tags', ['slug' => $slug]);
 
@@ -418,9 +430,9 @@ class WordPressPostRepository
      */
     public function searchPosts(string $search, ?int $perPage = null): Collection
     {
-        $cacheKey = 'wp_repo_search_' . md5($search) . '_' . ($perPage ?? 'all');
+        $cacheKey = $this->cachePrefix . 'repo_search_' . md5($search) . '_' . ($perPage ?? 'all');
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($search, $perPage) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($search, $perPage) {
             $filters = [
                 'search' => $search,
             ];
@@ -444,9 +456,9 @@ class WordPressPostRepository
      */
     public function getPostsByAuthor(int $authorId, ?int $perPage = null): Collection
     {
-        $cacheKey = 'wp_repo_author_' . $authorId . '_' . ($perPage ?? 'all');
+        $cacheKey = $this->cachePrefix . 'repo_author_' . $authorId . '_' . ($perPage ?? 'all');
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($authorId, $perPage) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($authorId, $perPage) {
             $filters = [
                 'author' => $authorId,
             ];
@@ -470,9 +482,9 @@ class WordPressPostRepository
      */
     public function getRelatedPosts(WordPressPost $post, int $limit = 4): Collection
     {
-        $cacheKey = 'wp_repo_related_' . $post->id . '_' . $limit;
+        $cacheKey = $this->cachePrefix . 'repo_related_' . $post->id . '_' . $limit;
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($post, $limit) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($post, $limit) {
             $categoryIds = $post->categories()->pluck('id')->toArray();
             $tagIds = $post->tags()->pluck('id')->toArray();
 
@@ -530,9 +542,9 @@ class WordPressPostRepository
     protected function fetchTerms(string $taxonomy, array $filters = []): array
     {
         $baseUrl = rtrim(config('wordpress.base_url'), '/');
-        $cacheKey = 'wp_terms_' . $taxonomy . '_' . md5(serialize($filters));
+        $cacheKey = $this->cachePrefix . 'terms_' . $taxonomy . '_' . md5(serialize($filters));
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($baseUrl, $taxonomy, $filters) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($baseUrl, $taxonomy, $filters) {
             $defaultFilters = [
                 'per_page' => config('wordpress.per_page'),
                 'hide_empty' => true,

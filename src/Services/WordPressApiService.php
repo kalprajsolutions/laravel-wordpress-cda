@@ -30,6 +30,16 @@ class WordPressApiService
     protected int $cacheDuration;
 
     /**
+     * Cache key prefix for this package.
+     */
+    protected string $cachePrefix;
+
+    /**
+     * Cache tags for this package.
+     */
+    protected array $cacheTags;
+
+    /**
      * Whether authentication is enabled.
      */
     protected bool $authEnabled;
@@ -50,6 +60,8 @@ class WordPressApiService
         $this->authorId = config('wordpress.author_id', 3);
         $this->perPage = config('wordpress.per_page', 100);
         $this->cacheDuration = config('wordpress.cache_duration', 60);
+        $this->cachePrefix = config('wordpress.cache_prefix', 'wp_cda_');
+        $this->cacheTags = config('wordpress.cache_tags', ['wordpress_cda']);
         $this->authEnabled = config('wordpress.auth.enabled', false);
 
         if ($this->authEnabled) {
@@ -101,9 +113,9 @@ class WordPressApiService
         }
 
         $queryParams = array_merge($defaultFilters, $filters);
-        $cacheKey = 'wp_posts_' . md5(serialize($queryParams));
+        $cacheKey = $this->cachePrefix . 'posts_' . md5(serialize($queryParams));
 
-        $cached = Cache::get($cacheKey);
+        $cached = Cache::tags($this->cacheTags)->get($cacheKey);
 
         // If we have cached data, restore the total count and return posts
         if ($cached !== null) {
@@ -123,7 +135,7 @@ class WordPressApiService
                 $posts = $response->json() ?? [];
 
                 // Store both posts and total count in cache
-                Cache::put($cacheKey, [
+                Cache::tags($this->cacheTags)->put($cacheKey, [
                     'posts' => $posts,
                     'total' => $this->lastTotalPostsCount,
                     'totalPages' => $totalPages,
@@ -155,9 +167,9 @@ class WordPressApiService
      */
     public function fetchPost(int $id): ?array
     {
-        $cacheKey = "wp_post_{$id}";
+        $cacheKey = $this->cachePrefix . "post_{$id}";
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($id) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($id) {
             try {
                 $response = $this->makeRequest('GET', "/posts/{$id}", [
                     '_embed' => 'wp:term,wp:featuredmedia,author',
@@ -197,9 +209,9 @@ class WordPressApiService
      */
     public function fetchPostBySlug(string $slug): ?array
     {
-        $cacheKey = 'wp_post_api_' . $slug;
+        $cacheKey = $this->cachePrefix . 'post_api_' . $slug;
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
             try {
                 $response = $this->makeRequest('GET', '/posts', [
                     'slug' => $slug,
@@ -241,9 +253,9 @@ class WordPressApiService
      */
     public function fetchMedia(int $id): ?array
     {
-        $cacheKey = "wp_media_{$id}";
+        $cacheKey = $this->cachePrefix . "media_{$id}";
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($id) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($id) {
             try {
                 $response = $this->makeRequest('GET', "/media/{$id}");
 
@@ -280,9 +292,8 @@ class WordPressApiService
      */
     public function clearPostsCache(): void
     {
-        // Note: This is a simplified cache clearing approach.
-        // In production, you might want to use cache tags if supported.
-        Cache::flush();
+        // Use cache tags to flush only this package's cache
+        Cache::tags($this->cacheTags)->flush();
     }
 
     /**
@@ -293,7 +304,7 @@ class WordPressApiService
      */
     public function clearPostCache(int $id): void
     {
-        Cache::forget("wp_post_{$id}");
+        Cache::tags($this->cacheTags)->forget($this->cachePrefix . "post_{$id}");
     }
 
     /**
@@ -398,9 +409,9 @@ class WordPressApiService
      */
     public function fetchCategories(int $perPage = 100): array
     {
-        $cacheKey = 'wp_all_categories_' . $perPage;
+        $cacheKey = $this->cachePrefix . 'all_categories_' . $perPage;
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($perPage) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($perPage) {
             try {
                 $categories = [];
                 $page = 1;
@@ -441,9 +452,9 @@ class WordPressApiService
      */
     public function fetchTags(int $perPage = 100): array
     {
-        $cacheKey = 'wp_all_tags_' . $perPage;
+        $cacheKey = $this->cachePrefix . 'all_tags_' . $perPage;
 
-        return Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($perPage) {
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($perPage) {
             try {
                 $tags = [];
                 $page = 1;

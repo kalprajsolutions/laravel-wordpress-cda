@@ -16,9 +16,19 @@ class WordPressImageService
     protected string $disk;
 
     /**
+     * Cache key prefix for this package.
+     */
+    protected string $cachePrefix;
+
+    /**
+     * Cache tags for this package.
+     */
+    protected array $cacheTags;
+
+    /**
      * Cache key prefix for URL mappings.
      */
-    protected string $mappingCachePrefix = 'wp_image_mapping_';
+    protected string $mappingCachePrefix = 'image_mapping_';
 
     /**
      * JSON file path for persistent URL mappings.
@@ -39,6 +49,8 @@ class WordPressImageService
     {
         $this->disk = config('wordpress.image_disk', 'blog-media');
         $this->preserveStructure = config('wordpress.preserve_structure', true);
+        $this->cachePrefix = config('wordpress.cache_prefix', 'wp_cda_');
+        $this->cacheTags = config('wordpress.cache_tags', ['wordpress_cda']);
         $this->wordpressBaseUrls = $this->getWordPressBaseUrls();
     }
 
@@ -434,8 +446,8 @@ class WordPressImageService
     {
         $cacheKey = $this->getMappingCacheKey($originalUrl);
 
-        // Store in cache
-        Cache::forever($cacheKey, $localPath);
+        // Store in cache with tags
+        Cache::tags($this->cacheTags)->forever($cacheKey, $localPath);
 
         // Also store in persistent file
         $this->updatePersistentMapping($originalUrl, $localPath);
@@ -451,8 +463,8 @@ class WordPressImageService
     {
         $cacheKey = $this->getMappingCacheKey($originalUrl);
 
-        // Try cache first
-        $cached = Cache::get($cacheKey);
+        // Try cache first with tags
+        $cached = Cache::tags($this->cacheTags)->get($cacheKey);
 
         if ($cached !== null) {
             return $cached;
@@ -471,7 +483,7 @@ class WordPressImageService
     protected function removeMapping(string $originalUrl): void
     {
         $cacheKey = $this->getMappingCacheKey($originalUrl);
-        Cache::forget($cacheKey);
+        Cache::tags($this->cacheTags)->forget($cacheKey);
 
         $this->removePersistentMapping($originalUrl);
     }
@@ -484,7 +496,7 @@ class WordPressImageService
      */
     protected function getMappingCacheKey(string $url): string
     {
-        return $this->mappingCachePrefix . hash('sha256', $url);
+        return $this->cachePrefix . $this->mappingCachePrefix . hash('sha256', $url);
     }
 
     /**

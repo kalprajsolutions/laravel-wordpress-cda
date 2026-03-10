@@ -48,6 +48,9 @@ WP_API_PER_PAGE=100
 # Cache duration in minutes
 WP_API_CACHE_DURATION=60
 
+# Cache prefix for this package (default: wp_cda_)
+WP_API_CACHE_PREFIX=wp_cda_
+
 # Custom User-Agent string for API requests
 WP_API_USER_AGENT=Laravel-WordPress-CDA/1.0
 
@@ -64,6 +67,81 @@ WP_API_PRESERVE_STRUCTURE=true
 WP_API_AUTH_ENABLED=false
 WP_API_USERNAME=your_username
 WP_API_APP_PASSWORD=xxxx xxxx xxxx xxxx
+```
+
+## Caching
+
+This package uses Laravel's cache system with tags to provide isolated cache management. All cached data is tagged with `wordpress_cda`, allowing you to flush only the WordPress CDA package cache without affecting other cached data in your application.
+
+### Cache Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Cache Prefix** | `wp_cda_` | Prepended to all cache keys |
+| **Cache Tags** | `['wordpress_cda']` | Tag-based cache grouping |
+| **Cache Duration** | `60` minutes | How long data is cached |
+
+### Customizing Cache Prefix and Tags
+
+You can customize the cache prefix via the environment variable:
+
+```env
+WP_API_CACHE_PREFIX=my_custom_prefix_
+```
+
+To customize cache tags, publish the config file and modify the `cache_tags` array directly in `config/wordpress.php`:
+
+```php
+// config/wordpress.php
+'cache_tags' => ['wordpress_cda', 'my_custom_tag'],
+```
+
+### Cache Driver Requirements
+
+> **Important:** Cache tags require a cache driver that supports tagging. Supported drivers include:
+
+- **Redis** (recommended)
+- **Memcached**
+
+Using drivers that don't support tags (like `file`, `database`, or `array`) will result in errors when using this package.
+
+### Flushing the Cache
+
+There are two ways to clear the WordPress CDA package cache:
+
+#### Using Cache Tags
+
+```php
+use Illuminate\Support\Facades\Cache;
+
+// Flush all WordPress CDA cache
+Cache::tags(['wordpress_cda'])->flush();
+```
+
+#### Using the Service Method
+
+```php
+use KalprajSolutions\LaravelWordpressCda\Services\WordPressApiService;
+
+// Clear all cached posts
+app(WordPressApiService::class)->clearPostsCache();
+
+// Clear cache for a specific post
+app(WordPressApiService::class)->clearPostCache($postId);
+```
+
+#### Using the Repository
+
+```php
+use KalprajSolutions\LaravelWordpressCda\Repositories\WordPressPostRepository;
+
+$repository = app(WordPressPostRepository::class);
+
+// Clear all cache
+$repository->clearCache();
+
+// Clear cache for a specific post
+$repository->clearPostCache($postId);
 ```
 
 ## Usage

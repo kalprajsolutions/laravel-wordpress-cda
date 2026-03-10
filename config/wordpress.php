@@ -65,6 +65,37 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Cache Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for caching behavior including prefix and tags.
+    | This allows selective cache flushing for WordPress CDA package.
+    |*/
+
+    /**
+     * Cache key prefix for this package.
+     *
+     * This prefix is prepended to all cache keys to isolate this
+     * package's cache from other Laravel cache entries. This enables
+     * selective cache clearing without affecting other cached data.
+     *
+     * @var string
+     */
+    'cache_prefix' => env('WP_API_CACHE_PREFIX', 'wp_cda_'),
+
+    /**
+     * Cache tags for this package.
+     *
+     * Tags allow for tag-based cache invalidation. When clearing
+     * cache, you can flush all entries with specific tags.
+     * Note: Cache tags require a tag-supported cache store (Redis, Memcached).
+     *
+     * @var array
+     */
+    'cache_tags' => ['wordpress_cda'],
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP Request Settings
     |--------------------------------------------------------------------------
     |
