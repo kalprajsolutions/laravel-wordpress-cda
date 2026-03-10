@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Drivers\Imagick\Driver;
@@ -463,11 +464,19 @@ class WordPressPost implements ArrayAccess, Arrayable, Jsonable, JsonSerializabl
         }
 
         try {
-            $imageData = file_get_contents($imageUrl);
-            if ($imageData === false) {
+            $userAgent = config('wordpress.user_agent', 'Laravel-WordPress-CDA/1.0');
+            $response = Http::withHeaders([
+                'User-Agent' => $userAgent,
+            ])
+            ->timeout(60)
+            ->withoutVerifying()
+            ->get($imageUrl);
+
+            if (!$response->successful()) {
                 return null;
             }
 
+            $imageData = $response->body();
             $disk->put($localPath, $imageData);
 
             return $localPath;
@@ -500,7 +509,7 @@ class WordPressPost implements ArrayAccess, Arrayable, Jsonable, JsonSerializabl
      */
     public function getUrl(): string
     {
-        return route('blog.post', ['slug' => $this->slug]);
+        return route(config('wordpress.blog_view_route'), ['slug' => $this->slug]);
     }
 
     /**

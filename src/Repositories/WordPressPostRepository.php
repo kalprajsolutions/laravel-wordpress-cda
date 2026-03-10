@@ -7,6 +7,7 @@ use KalprajSolutions\LaravelWordpressCda\Models\WordPressPost;
 use KalprajSolutions\LaravelWordpressCda\Models\WordPressTag;
 use KalprajSolutions\LaravelWordpressCda\Services\WordPressApiService;
 use KalprajSolutions\LaravelWordpressCda\Services\WordPressImageService;
+use KalprajSolutions\LaravelWordpressCda\Services\ContentImageProcessor;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -66,7 +67,7 @@ class WordPressPostRepository
             }
         }
 
-        $postModels = collect($posts)->map(fn ($post) => WordPressPost::fromApiResponse($post));
+        $postModels = collect($posts)->map(fn($post) => WordPressPost::fromApiResponse($post));
 
         // Create paginator - ensure total is always correct
         return new LengthAwarePaginator(
@@ -82,34 +83,63 @@ class WordPressPostRepository
     }
 
     /**
-     * Get a single post by its slug.
+     * Get a single post by its slug with optional image caching.
      *
      * @param string $slug The post slug
+     * @param bool $cacheImages Whether to also cache post images immediately
      * @return WordPressPost|null
      */
-    public function getPostBySlug(string $slug): ?WordPressPost
+    public function getPostBySlug(string $slug, bool $cacheImages = false): ?WordPressPost
     {
-        // Try cache first (used by the cache command)
-        $cacheKey = 'wp_post_' . $slug;
-        $cached = Cache::get($cacheKey);
-        
-        if ($cached) {
-            return WordPressPost::fromApiResponse($cached);
-        }
-        
-        // Fall back to repository cache
-        $repoCacheKey = 'wp_repo_post_slug_' . md5($slug);
+        $cacheKey = 'wp_repo_post_slug_' . md5($slug);
 
-        return Cache::remember($repoCacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
-            // Fall back to API
-            $post = $this->apiService->fetchPostBySlug($slug);
-            
-            if ($post) {
-                return WordPressPost::fromApiResponse($post);
-            }
-            
-            return null;
+        $postData = Cache::remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($slug) {
+            return $this->apiService->fetchPostBySlug($slug);
         });
+
+        if (!$postData) {
+            return null;
+        }
+
+        $post = WordPressPost::fromApiResponse($postData);
+
+        // Optional: Cache images immediately if requested
+        if ($cacheImages) {
+            $this->cachePostImages($postData);
+        }
+
+        return $post;
+    }
+
+    /**
+     * Cache images for a specific post
+     *
+     * @param array $postData
+     * @return void
+     */
+    private function cachePostImages(array $postData): void
+    {
+        $imageService = app(WordPressImageService::class);
+        $contentProcessor = app(ContentImageProcessor::class);
+
+        $urls = [];
+
+        // Featured image
+        if (!empty($postData['_embedded']['wp:featuredmedia'][0]['source_url'])) {
+            $urls[] = $postData['_embedded']['wp:featuredmedia'][0]['source_url'];
+        }
+
+        // Content images
+        if (!empty($postData['content']['rendered'])) {
+            $contentUrls = $contentProcessor->extractImageUrls($postData['content']['rendered']);
+            $urls = array_merge($urls, $contentUrls);
+        }
+
+        if (!empty($urls)) {
+            // Use non-blocking approach - dispatch job or fire event
+            // Or use concurrent downloads for immediate caching
+            $imageService->downloadAndCacheMultiple(array_unique($urls));
+        }
     }
 
     /**
@@ -134,7 +164,7 @@ class WordPressPostRepository
                 'categories' => $category->id,
             ]);
 
-            return collect($postsData)->map(fn (array $post) => WordPressPost::fromApiResponse($post));
+            return collect($postsData)->map(fn(array $post) => WordPressPost::fromApiResponse($post));
         });
     }
 
@@ -160,7 +190,7 @@ class WordPressPostRepository
                 'tags' => $tag->id,
             ]);
 
-            return collect($postsData)->map(fn (array $post) => WordPressPost::fromApiResponse($post));
+            return collect($postsData)->map(fn(array $post) => WordPressPost::fromApiResponse($post));
         });
     }
 
@@ -181,7 +211,7 @@ class WordPressPostRepository
                 'order' => 'desc',
             ]);
 
-            return collect($postsData)->map(fn (array $post) => WordPressPost::fromApiResponse($post));
+            return collect($postsData)->map(fn(array $post) => WordPressPost::fromApiResponse($post));
         });
     }
 
@@ -207,7 +237,7 @@ class WordPressPostRepository
                 return $this->getRecentPosts($limit);
             }
 
-            return collect($postsData)->map(fn (array $post) => WordPressPost::fromApiResponse($post));
+            return collect($postsData)->map(fn(array $post) => WordPressPost::fromApiResponse($post));
         });
     }
 
@@ -247,7 +277,7 @@ class WordPressPostRepository
 
             // Build category models, using author-specific counts and skipping unused ones
             $categories = collect($categoriesData)
-                ->filter(fn ($cat) => isset($authorCategoryCounts[$cat['id']]))
+                ->filter(fn($cat) => isset($authorCategoryCounts[$cat['id']]))
                 ->map(function ($cat) use ($authorCategoryCounts) {
                     $category = new WordPressCategory();
                     $category->id          = $cat['id'];
@@ -278,11 +308,11 @@ class WordPressPostRepository
 
         return Cache::remember($cacheKey, config('wordpress.cache_duration'), function () {
             $startTime = microtime(true);
-            
+
             // Use the direct tags endpoint - much more efficient!
             // This is just 1-2 API calls instead of iterating through all posts
             $tagsData = $this->apiService->fetchTags(config('wordpress.per_page'));
-            
+
             if (empty($tagsData)) {
                 return collect();
             }
@@ -296,7 +326,7 @@ class WordPressPostRepository
                 $wpTag->count = $tag['count'] ?? 0;
                 return $wpTag;
             });
-            
+
             $endTime = microtime(true);
             $duration = round(($endTime - $startTime) * 1000, 2);
             Log::info("getAuthorTags: Fetched " . count($tags) . " tags in {$duration}ms");
@@ -401,7 +431,7 @@ class WordPressPostRepository
 
             $postsData = $this->apiService->fetchPosts($filters);
 
-            return collect($postsData)->map(fn (array $post) => WordPressPost::fromApiResponse($post));
+            return collect($postsData)->map(fn(array $post) => WordPressPost::fromApiResponse($post));
         });
     }
 
@@ -427,7 +457,7 @@ class WordPressPostRepository
 
             $postsData = $this->apiService->fetchPosts($filters);
 
-            return collect($postsData)->map(fn (array $post) => WordPressPost::fromApiResponse($post));
+            return collect($postsData)->map(fn(array $post) => WordPressPost::fromApiResponse($post));
         });
     }
 
@@ -461,9 +491,9 @@ class WordPressPostRepository
             $postsData = $this->apiService->fetchPosts($filters);
 
             return collect($postsData)
-                ->reject(fn (array $p) => $p['id'] === $post->id)
+                ->reject(fn(array $p) => $p['id'] === $post->id)
                 ->take($limit)
-                ->map(fn (array $p) => WordPressPost::fromApiResponse($p));
+                ->map(fn(array $p) => WordPressPost::fromApiResponse($p));
         });
     }
 
@@ -511,7 +541,9 @@ class WordPressPostRepository
             $queryParams = array_merge($defaultFilters, $filters);
             $url = $baseUrl . '/' . $taxonomy;
 
-            $response = \Illuminate\Support\Facades\Http::withOptions([
+            $response = \Illuminate\Support\Facades\Http::withHeaders([
+                'User-Agent' => config('wordpress.user_agent', 'Laravel-WordPress-CDA/1.0'),
+            ])->withOptions([
                 'timeout' => 30,
                 'connect_timeout' => 10,
             ])->get($url, $queryParams);

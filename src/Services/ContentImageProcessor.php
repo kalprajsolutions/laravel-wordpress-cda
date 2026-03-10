@@ -48,8 +48,6 @@ class ContentImageProcessor
         // Extract all image URLs from the HTML
         $imageUrls = $this->extractImageUrls($html);
 
-        // \dd($imageUrls);
-
         if (empty($imageUrls)) {
             return $html;
         }

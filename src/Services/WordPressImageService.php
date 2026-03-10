@@ -120,7 +120,9 @@ class WordPressImageService
 
         try {
             // Download the image
-            $response = Http::withOptions([
+            $response = Http::withHeaders([
+                'User-Agent' => config('wordpress.user_agent', 'Laravel-WordPress-CDA/1.0'),
+            ])->withOptions([
                 'timeout' => 60,
                 'connect_timeout' => 10,
             ])->get($imageUrl);
@@ -617,9 +619,12 @@ public function downloadAndCacheMultiple(array $urls): array
     }
 
     // Use Http::pool to execute requests in parallel
-    $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($uncachedUrls) {
+    $userAgent = config('wordpress.user_agent', 'Laravel-WordPress-CDA/1.0');
+    $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($uncachedUrls, $userAgent) {
         foreach ($uncachedUrls as $url) {
-            $pool->withOptions([
+            $pool->withHeaders([
+                'User-Agent' => $userAgent,
+            ])->withOptions([
                 'timeout' => 60,
                 'connect_timeout' => 10,
             ])->get($url);

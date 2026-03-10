@@ -35,18 +35,18 @@ class CacheWordPressContent extends Command
             $this->clean();
         }
 
-        
+
         // 1. Cache categories and tags
         $this->cacheTaxonomies();
-        
+
         // 2. Cache all posts with pagination
         $this->cachePosts();
-        
+
         // 3. Cache images if requested
         if ($this->option('images')) {
             $this->cacheImages();
         }
-        
+
         $this->info('WordPress content caching completed!');
         return 0;
     }
@@ -69,7 +69,7 @@ class CacheWordPressContent extends Command
         $this->info('Caching categories...');
         $categories = $this->repository->getAuthorCategories();
         $this->info("Cached {$categories->count()} categories");
-        
+
         $this->info('Caching tags...');
         $tags = $this->repository->getAuthorTags();
         $this->info("Cached {$tags->count()} tags");
@@ -78,15 +78,15 @@ class CacheWordPressContent extends Command
     private function cachePosts(): void
     {
         $this->info('Caching posts...');
-        
+
         $page = 1;
         $perPage = 10;
         $totalCached = 0;
         $maxPages = $this->option('pages') === 'all' ? null : (int) $this->option('pages');
-        
+
         do {
             $this->info("Fetching page {$page}...");
-            
+
             $posts = $this->apiService->fetchPosts([
                 'author' => config('wordpress.author_id'),
                 'status' => 'publish',
@@ -94,62 +94,40 @@ class CacheWordPressContent extends Command
                 'page' => $page,
                 '_embed' => 'wp:term,wp:featuredmedia,author',
             ]);
-            
+
             if (empty($posts)) {
                 break;
             }
-            
+
             // Cache each individual post
             foreach ($posts as $postData) {
-                $this->cacheSinglePost($postData);
+                $this->repository->getPostBySlug($postData['slug'], false);
                 $totalCached++;
             }
-            
+
             $this->info("Cached page {$page} with " . count($posts) . " posts");
-            
+
             $page++;
-            
+
             // Stop if we've reached max pages
             if ($maxPages && $page > $maxPages) {
                 break;
             }
-            
         } while (count($posts) === $perPage);
-        
-        $this->info("Total posts cached: {$totalCached}");
-    }
 
-    private function cacheSinglePost(array $postData): void
-    {
-        $slug = $postData['slug'];
-        
-        // Cache post by slug
-        $cacheKey = 'wp_post_' . $slug;
-        Cache::put($cacheKey, $postData, now()->addMinutes(config('wordpress.cache_duration')));
-        
-        // Process and cache images in content if enabled
-        if (isset($postData['content']['rendered'])) {
-            $this->contentProcessor->process($postData['content']['rendered'], $cacheKey . '_content');
-        }
-        
-        // Cache featured image
-        if (isset($postData['_embedded']['wp:featuredmedia'][0]['source_url'])) {
-            $this->imageService->getOrDownload(
-                $postData['_embedded']['wp:featuredmedia'][0]['source_url']
-            );
-        }
+        $this->info("Total posts cached: {$totalCached}");
     }
 
     private function cacheImages(): void
     {
         $this->info('Caching all images...');
-        
+
         $allUrls = [];
-        
+
         // First pass: collect all image URLs from all posts
         $page = 1;
         $perPage = 10;
-        
+
         do {
             $posts = $this->apiService->fetchPosts([
                 'author' => config('wordpress.author_id'),
@@ -158,37 +136,37 @@ class CacheWordPressContent extends Command
                 'page' => $page,
                 '_embed' => 'wp:term,wp:featuredmedia,author',
             ]);
-            
+
             if (empty($posts)) {
                 break;
             }
-            
+
             foreach ($posts as $postData) {
                 // Collect featured image URL
                 if (isset($postData['_embedded']['wp:featuredmedia'][0]['source_url'])) {
                     $allUrls[] = $postData['_embedded']['wp:featuredmedia'][0]['source_url'];
                 }
-                
+
                 // Collect content image URLs
                 if (isset($postData['content']['rendered'])) {
                     $contentUrls = $this->contentProcessor->extractImageUrls($postData['content']['rendered']);
                     $allUrls = array_merge($allUrls, $contentUrls);
                 }
             }
-            
+
             $page++;
         } while (count($posts) === $perPage);
-        
+
         // Remove duplicates
         $allUrls = array_unique($allUrls);
-        
+
         $this->info('Found ' . count($allUrls) . ' unique images to cache');
-        
+
         // Download all images in parallel using bulk download
         $results = $this->imageService->downloadAndCacheMultiple($allUrls);
-        
+
         $totalImages = count($results);
-        
+
         $this->info("Total images cached: {$totalImages}");
     }
 }

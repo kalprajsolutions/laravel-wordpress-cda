@@ -308,7 +308,9 @@ class WordPressApiService
     {
         $url = $this->baseUrl . $endpoint;
 
-        $request = Http::withOptions([
+        $request = Http::withHeaders([
+            'User-Agent' => config('wordpress.user_agent', 'Laravel-WordPress-CDA/1.0'),
+        ])->withOptions([
             'timeout' => 30,
             'connect_timeout' => 10,
         ]);
