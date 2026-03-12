@@ -1,3 +1,12 @@
+<div align="left">
+    <a href="https://kalprajsolutions.com/?utm_source=github&utm_medium=banner&utm_campaign=laravel-wordpress-cda">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://github.com/Pushkraj19/Pushkraj19/blob/d72ff5e2eb7299546cd8348c25fd835a39becce0/laravel-wordpress-cda.png">
+        <img alt="Logo for Laravel Wordpress CDA" src="https://github.com/Pushkraj19/Pushkraj19/blob/d72ff5e2eb7299546cd8348c25fd835a39becce0/laravel-wordpress-cda.png">
+      </picture>
+    </a>
+</div>
+
 # Laravel WordPress CDA (Content Delivery Adapter)
 
 A Laravel package that integrates WordPress as a headless CMS, fetching blog posts via the WordPress REST API and serving them locally with Laravel Eloquent-like model types. Perfect for maintaining a WordPress blog backend while serving content through your Laravel application.
