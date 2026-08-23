@@ -444,6 +444,61 @@ class WordPressApiService
     }
 
     /**
+     * Fetch tags restricted to specific tag IDs.
+     *
+     * Unlike fetchTags(), this only returns the requested terms, which allows
+     * callers to scope tag collections to a specific author by deriving the
+     * tag IDs from that author's posts.
+     *
+     * @param array $ids Tag IDs to fetch
+     * @return array
+     */
+    public function fetchTagsByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+
+        if (empty($ids)) {
+            return [];
+        }
+
+        $cacheKey = $this->cachePrefix . 'tags_by_ids_' . md5(serialize($ids));
+
+        return Cache::tags($this->cacheTags)->remember($cacheKey, now()->addMinutes($this->cacheDuration), function () use ($ids) {
+            try {
+                $tags = [];
+
+                // The REST API caps per_page at 100, so large ID sets are chunked
+                foreach (array_chunk($ids, 100) as $chunk) {
+                    $response = $this->makeRequest('GET', '/tags', [
+                        'per_page' => 100,
+                        'include' => implode(',', $chunk),
+                        '_fields' => 'id,name,slug,count',
+                    ]);
+
+                    if (!$response->successful()) {
+                        Log::warning('WordPress API tags by ids fetch failed', [
+                            'status' => $response->status(),
+                            'body' => $response->body(),
+                        ]);
+
+                        continue;
+                    }
+
+                    $tags = array_merge($tags, $response->json() ?? []);
+                }
+
+                return $tags;
+            } catch (\Exception $e) {
+                Log::error('WordPress API tags by ids fetch exception', [
+                    'message' => $e->getMessage(),
+                ]);
+
+                return [];
+            }
+        });
+    }
+
+    /**
      * Fetch all tags directly from the tags endpoint.
      * This is much more efficient than extracting from posts.
      *

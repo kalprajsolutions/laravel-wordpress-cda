@@ -321,23 +321,48 @@ class WordPressPostRepository
         return Cache::tags($this->cacheTags)->remember($cacheKey, config('wordpress.cache_duration'), function () {
             $startTime = microtime(true);
 
-            // Use the direct tags endpoint - much more efficient!
-            // This is just 1-2 API calls instead of iterating through all posts
-            $tagsData = $this->apiService->fetchTags(config('wordpress.per_page'));
+            // The /tags endpoint has no author parameter, so tags must be scoped
+            // by deriving tag IDs from the author's own posts (same approach as
+            // getAuthorCategories). Lightweight fetch: id + tags fields only.
+            // All pages are walked since authors can have more posts than one
+            // API page holds.
+            $perPage = (int) config('wordpress.per_page');
+            $authorTagCounts = [];
+            $page = 1;
 
-            if (empty($tagsData)) {
+            do {
+                $authorPosts = $this->apiService->fetchPosts([
+                    'per_page' => $perPage,
+                    'page'     => $page,
+                    '_fields'  => 'id,tags',
+                ]);
+
+                foreach ($authorPosts as $post) {
+                    foreach ($post['tags'] ?? [] as $tagId) {
+                        $authorTagCounts[$tagId] = ($authorTagCounts[$tagId] ?? 0) + 1;
+                    }
+                }
+
+                $page++;
+            } while (count($authorPosts) === $perPage);
+
+            if (empty($authorTagCounts)) {
                 return collect();
             }
 
-            // Transform to WordPressTag models
-            $tags = collect($tagsData)->map(function ($tag) {
-                $wpTag = new WordPressTag();
-                $wpTag->id = $tag['id'];
-                $wpTag->name = $tag['name'] ?? 'Tag ' . $tag['id'];
-                $wpTag->slug = $tag['slug'] ?? 'tag-' . $tag['id'];
-                $wpTag->count = $tag['count'] ?? 0;
-                return $wpTag;
-            });
+            // Hydrate only the derived tag IDs, keeping author-scoped counts
+            $tagsData = $this->apiService->fetchTagsByIds(array_keys($authorTagCounts));
+
+            $tags = collect($tagsData)
+                ->map(function ($tag) use ($authorTagCounts) {
+                    $wpTag = new WordPressTag();
+                    $wpTag->id = $tag['id'];
+                    $wpTag->name = $tag['name'] ?? 'Tag ' . $tag['id'];
+                    $wpTag->slug = $tag['slug'] ?? 'tag-' . $tag['id'];
+                    $wpTag->count = $authorTagCounts[$tag['id']] ?? 0;
+                    return $wpTag;
+                })
+                ->values();
 
             $endTime = microtime(true);
             $duration = round(($endTime - $startTime) * 1000, 2);
