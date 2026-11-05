@@ -3,7 +3,7 @@
     "description": "WordPress blog caching functionality for Laravel applications",
     "type": "library",
     "keywords": ["laravel", "wordpress", "blog", "caching", "api"],
-    "homepage": "https://github.com/kalprajsolutions/wordpress-blog-system",
+    "homepage": "https://github.com/kalprajsolutions/laravel-wordpress-cda",
     "license": "MIT",
     "authors": [
         {
@@ -18,7 +18,7 @@
     },
     "require-dev": {
         "phpunit/phpunit": "^10.0|^11.0",
-        "orchestra/testbench": "^8.0|^9.0"
+        "orchestra/testbench": "^8.0|^9.0|^10.0|^11.0"
     },
     "autoload": {
         "psr-4": {
